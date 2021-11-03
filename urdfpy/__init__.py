@@ -1,3 +1,7 @@
+import os
+if 'DISPLAY' not in os.environ or len(os.environ['DISPLAY']) == 0:
+    os.environ['PYOPENGL_PLATFORM'] = 'egl'
+
 from .urdf import (URDFType,
                    Box, Cylinder, Sphere, Mesh, Geometry,
                    Texture, Material,

@@ -3557,7 +3557,15 @@ class URDF(URDFType):
             If True, the collision geometry is visualized instead of
             the visual geometry.
         """
+        import os
+
+        from PIL import Image
         import pyrender  # Save pyrender import for here for CI
+
+        if 'PYOPENGL_PLATFORM' in os.environ:
+            offscreen = True
+        else:
+            offscreen = False
 
         if use_collision:
             fk = self.collision_trimesh_fk(cfg=cfg)
@@ -3566,10 +3574,22 @@ class URDF(URDFType):
 
         scene = pyrender.Scene()
         for tm in fk:
-            pose = fk[tm]
+            _pose = fk[tm]
             mesh = pyrender.Mesh.from_trimesh(tm, smooth=False)
-            scene.add(mesh, pose=pose)
-        pyrender.Viewer(scene, use_raymond_lighting=True)
+            scene.add(mesh, pose=_pose)
+        if offscreen:
+            # create a camera
+            _camera = pyrender.OrthographicCamera(xmag=1.0, ymag=1.0)
+            _cameraNode = pyrender.Node(camera = _camera)
+            scene.add_node(_cameraNode)
+            # create the renderer
+            offscreenRenderer = pyrender.OffscreenRenderer(viewport_width=640, viewport_height=480, point_size=1.0)
+            
+            colors, depth = offscreenRenderer.render(scene)
+            print(f"DEBUG: offscreenRenderer.render(scene) => {colors.shape} {depth.shape}")
+            Image.fromarray(colors.astype('uint8'), mode='RGB').save(f"{self.name}.jpg")
+        else:
+            pyrender.Viewer(scene, use_raymond_lighting=True)
 
     def copy(self, name=None, prefix='', scale=None, collision_only=False):
         """Make a deep copy of the URDF.
