@@ -2,6 +2,11 @@
 examples/output/
 .vscode/
 
+# images and video clips
+*.gif
+*.png
+*.jpg
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
