@@ -16,9 +16,7 @@ from .joint import (
     JointDynamics,
     JointLimit,
     JointMimic,
-    SafetyController,
-    Actuator,
-    TransmissionJoint,
+    SafetyController
 )
 from .manipulation import (
     Transmission,

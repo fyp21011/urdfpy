@@ -11,7 +11,6 @@ from urdfpy.urdf import (URDFType,
                    Transmission, Joint, Link, URDF)
 from .utils import (rpy_to_matrix, matrix_to_rpy, xyz_rpy_to_matrix,
                     matrix_to_xyz_rpy)
-from .version import __version__
 
 __all__ = [
     'URDFType', 'Box', 'Cylinder', 'Sphere', 'Mesh', 'Geometry',
