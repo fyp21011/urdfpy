@@ -305,15 +305,18 @@ class Mesh(URDFType):
     def _from_xml(cls, node, path):
         kwargs = cls._parse(node, path)
 
-        # Load the mesh, combining collision geometry meshes but keeping
-        # visual ones separate to preserve colors and textures
+        # Load the mesh, combining collision geometry meshes for simplicity
         fn = get_filename(path, kwargs['filename'])
         combine = node.getparent().getparent().tag == Collision._TAG
         meshes = load_mesh(fn)
         if combine:
-            # Delete visuals for simplicity
-            # TODO: implement in Open3D
-            pass
+            # Simplify the geometry
+            triCluster, clusterNTriangle, clusterArea = meshes.cluster_connected_triangles()
+            triCluster = np.asarray(triCluster)
+            clusterNTriangle = np.asarray(clusterNTriangle)
+            clusterArea = np.asarray(clusterArea)
+            triangle4Simplify = clusterNTriangle[triCluster] < 100
+            meshes.remove_triangles_by_mask(triangle4Simplify)
         kwargs['meshes'] = meshes
 
         return Mesh(**kwargs)
@@ -326,9 +329,6 @@ class Mesh(URDFType):
         meshes = self.meshes
         if len(meshes) == 1:
             meshes = meshes[0]
-        # elif os.path.splitext(fn)[1] == '.glb':
-        #     meshes = trimesh.scene.Scene(geometry=meshes)
-        # TODO: unknown whether the open3d needs the same pre-processing
         o3d.io.write_triangle_mesh(fn, meshes)
 
         # Unparse the node
