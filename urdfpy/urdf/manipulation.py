@@ -6,7 +6,7 @@ import time
 from lxml import etree as ET
 import networkx as nx
 import numpy as np
-import trimesh
+import open3d as o3d
 import six
 
 from urdfpy.urdf.base import URDFType
@@ -417,7 +417,7 @@ class Joint(URDFType):
                 cfg = 0.0
             else:
                 cfg = float(cfg)
-            R = trimesh.transformations.rotation_matrix(cfg, self.axis)
+            R = o3d.geometry.get_rotation_matrix_from_xyz(cfg * self.axis)
             return self.origin.dot(R)
         elif self.joint_type == 'prismatic':
             if cfg is None:
