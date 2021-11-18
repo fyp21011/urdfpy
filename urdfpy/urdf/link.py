@@ -2,8 +2,8 @@ import os
 
 from lxml import etree as ET
 import numpy as np
+import open3d as o3d
 import PIL
-import trimesh
 import six
 
 from urdfpy.urdf.base import URDFType
@@ -11,7 +11,7 @@ from urdfpy.utils import (
     parse_origin,
     unparse_origin,
     get_filename,
-    load_meshes,
+    load_mesh,
     configure_origin
 )
 
@@ -31,7 +31,7 @@ class Box(URDFType):
 
     def __init__(self, size):
         self.size = size
-        self._meshes = []
+        self._meshes = None
 
     @property
     def size(self):
@@ -42,15 +42,28 @@ class Box(URDFType):
     @size.setter
     def size(self, value):
         self._size = np.asanyarray(value).astype(np.float64)
-        self._meshes = []
+        self._meshes = None
 
     @property
     def meshes(self):
-        """list of :class:`~trimesh.base.Trimesh` : The triangular meshes
-        that represent this object.
+        """a pen3d.geometry.TriangleMesh object : The triangular meshes
+        whose vertex normal has been computed already
         """
-        if len(self._meshes) == 0:
-            self._meshes = [trimesh.creation.box(extents=self.size)]
+        if self._meshes is None:
+            self._meshes = o3d.geometry.TriangleMesh.create_box(
+                self._size[0],
+                self._size[1],
+                self._size[2]
+            )
+            T = np.eye(4)
+            T[:3] += (
+                -1 * self._size[0], 
+                -1 * self._size[1], 
+                -1 * self._size[2],
+                0
+            )
+            self._meshes.transform(T)
+            self._meshes.compute_vertex_normals()
         return self._meshes
 
     def copy(self, prefix='', scale=None):
@@ -120,14 +133,16 @@ class Cylinder(URDFType):
 
     @property
     def meshes(self):
-        """list of :class:`~trimesh.base.Trimesh` : The triangular meshes
-        that represent this object.
+        """a open3d.geometry.TriangleMesh object : The triangular meshes
+        whose vertex normal has been computed already
         """
-        if len(self._meshes) == 0:
-            self._meshes = [trimesh.creation.cylinder(
-                radius=self.radius, height=self.length
-            )]
-        return self._mesh
+        if self._meshes is None:
+            self._meshes = o3d.geometry.TriangleMesh.create_cylinder(
+                radius = self.radius,
+                height = self.length
+            )
+            self._meshes.compute_vertex_normals()
+        return self._meshes
 
     def copy(self, prefix='', scale=None):
         """Create a deep copy with the prefix applied to all names.
@@ -185,15 +200,16 @@ class Sphere(URDFType):
     @radius.setter
     def radius(self, value):
         self._radius = float(value)
-        self._meshes = []
+        self._meshes = None
 
     @property
     def meshes(self):
-        """list of :class:`~trimesh.base.Trimesh` : The triangular meshes
-        that represent this object.
+        """a pen3d.geometry.TriangleMesh object : The triangular meshes
+        whose vertex normal has been computed already
         """
-        if len(self._meshes) == 0:
-            self._meshes = [trimesh.creation.icosphere(radius=self.radius)]
+        if self._meshes is None:
+            self._meshes = o3d.geometry.TriangleMesh.create_sphere(self._radius)
+            self._meshes.compute_vertex_normals()
         return self._meshes
 
     def copy(self, prefix='', scale=None):
@@ -232,11 +248,8 @@ class Mesh(URDFType):
     scale : (3,) float, optional
         The scaling value for the mesh along the XYZ axes.
         If ``None``, assumes no scale is applied.
-    meshes : list of :class:`~trimesh.base.Trimesh`
-        A list of meshes that compose this mesh.
-        The list of meshes is useful for visual geometries that
-        might be composed of separate trimesh objects.
-        If not specified, the mesh is loaded from the file using trimesh.
+    meshes : o3d.geometry.TriangleMesh object
+        If not specified, the mesh is loaded from the file.
     """
     _ATTRIBS = {
         'filename': (str, True),
@@ -246,7 +259,7 @@ class Mesh(URDFType):
 
     def __init__(self, filename, scale=None, meshes=None):
         if meshes is None:
-            meshes = load_meshes(filename)
+            meshes = load_mesh(filename)
         self.filename = filename
         self.scale = scale
         self.meshes = meshes
@@ -275,27 +288,17 @@ class Mesh(URDFType):
 
     @property
     def meshes(self):
-        """list of :class:`~trimesh.base.Trimesh` : The triangular meshes
-        that represent this object.
+        """a pen3d.geometry.TriangleMesh object : The triangular meshes
+        whose vertex normal has been computed already
         """
         return self._meshes
 
     @meshes.setter
     def meshes(self, value):
         if isinstance(value, six.string_types):
-            value = load_meshes(value)
-        elif isinstance(value, (list, tuple, set, np.ndarray)):
-            value = list(value)
-            if len(value) == 0:
-                raise ValueError('Mesh must have at least one trimesh.Trimesh')
-            for m in value:
-                if not isinstance(m, trimesh.Trimesh):
-                    raise TypeError('Mesh requires a trimesh.Trimesh or a '
-                                    'list of them')
-        elif isinstance(value, trimesh.Trimesh):
-            value = [value]
-        else:
-            raise TypeError('Mesh requires a trimesh.Trimesh')
+            value = load_mesh(value)
+        elif not isinstance(value, o3d.geometry.TriangleMesh):
+            raise TypeError('Mesh requires a open3d.geometry.TriangleMesh')
         self._meshes = value
 
     @classmethod
@@ -306,12 +309,11 @@ class Mesh(URDFType):
         # visual ones separate to preserve colors and textures
         fn = get_filename(path, kwargs['filename'])
         combine = node.getparent().getparent().tag == Collision._TAG
-        meshes = load_meshes(fn)
+        meshes = load_mesh(fn)
         if combine:
             # Delete visuals for simplicity
-            for m in meshes:
-                m.visual = trimesh.visual.ColorVisuals(mesh=m)
-            meshes = [meshes[0] + meshes[1:]]
+            # TODO: implement in Open3D
+            pass
         kwargs['meshes'] = meshes
 
         return Mesh(**kwargs)
@@ -324,9 +326,10 @@ class Mesh(URDFType):
         meshes = self.meshes
         if len(meshes) == 1:
             meshes = meshes[0]
-        elif os.path.splitext(fn)[1] == '.glb':
-            meshes = trimesh.scene.Scene(geometry=meshes)
-        trimesh.exchange.export.export_mesh(meshes, fn)
+        # elif os.path.splitext(fn)[1] == '.glb':
+        #     meshes = trimesh.scene.Scene(geometry=meshes)
+        # TODO: unknown whether the open3d needs the same pre-processing
+        o3d.io.write_triangle_mesh(fn, meshes)
 
         # Unparse the node
         node = self._unparse(path)
@@ -464,8 +467,8 @@ class Geometry(URDFType):
 
     @property
     def meshes(self):
-        """list of :class:`~trimesh.base.Trimesh` : The geometry's triangular
-        mesh representation(s).
+        """a pen3d.geometry.TriangleMesh object : The triangular meshes
+        whose vertex normal has been computed already
         """
         return self.geometry.meshes
 

@@ -209,7 +209,7 @@ def get_filename(base_path, file_path, makedirs=False):
     return fn
 
 
-def load_meshes(filename: str) -> o3d.geometry.TriangleMesh:
+def load_mesh(filename: str) -> o3d.geometry.TriangleMesh:
     """Loads triangular meshes from a file.
 
     Parameters
@@ -219,8 +219,7 @@ def load_meshes(filename: str) -> o3d.geometry.TriangleMesh:
 
     Returns
     -------
-    meshes : list of :class:`~trimesh.base.Trimesh`
-        The meshes loaded from the file.
+    meshes : The meshes loaded from the file.
     """
     return o3d.io.read_triangle_mesh(filename)
 
