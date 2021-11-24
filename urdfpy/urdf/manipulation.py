@@ -1349,6 +1349,7 @@ class URDF(URDFType):
                 fk[cm] = poses
         return fk
 
+
     def copy(self, name=None, prefix='', scale=None, collision_only=False):
         """Make a deep copy of the URDF.
 
