@@ -693,21 +693,25 @@ class Link(URDFType):
         if len(self.collisions) == 0:
             return None
         if self._collision_mesh is None:
-            meshes = []
+            meshesList = []
+            # list of meshes from ALL collision objects
             for c in self.collisions:
-                for m in c.geometry.meshes:
-                    m = m.copy()
-                    pose = c.origin
-                    if c.geometry.mesh is not None:
-                        if c.geometry.mesh.scale is not None:
-                            S = np.eye(4)
-                            S[:3,:3] = np.diag(c.geometry.mesh.scale)
-                            pose = pose.dot(S)
-                    m.apply_transform(pose)
-                    meshes.append(m)
-            if len(meshes) == 0:
+                m = c.geometry.meshes
+                # NOTE: m here is a o3d.geometry.TriangleMesh
+                m = m.copy()
+                pose = c.origin
+                if c.geometry.mesh is not None:
+                    # c.geometry.mesh  is  the  Mesh  object,  an
+                    # instance of the derived class from URDFType
+                    if c.geometry.mesh.scale is not None:
+                        S = np.eye(4)
+                        S[:3,:3] = np.diag(c.geometry.mesh.scale)
+                        pose = pose.dot(S)
+                m.transform(pose)
+                meshesList.append(m)
+            if len(meshesList) == 0:
                 return None
-            self._collision_mesh = (meshes[0] + meshes[1:])
+            self._collision_mesh = (meshesList[0] + meshesList[1:])
         return self._collision_mesh
 
     def copy(self, prefix='', scale=None, collision_only=False):
