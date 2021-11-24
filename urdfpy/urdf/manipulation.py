@@ -698,7 +698,7 @@ class Link(URDFType):
             for c in self.collisions:
                 m = c.geometry.meshes
                 # NOTE: m here is a o3d.geometry.TriangleMesh
-                m = m.copy()
+                m = copy.deepcopy(m)
                 pose = c.origin
                 if c.geometry.mesh is not None:
                     # c.geometry.mesh  is  the  Mesh  object,  an
@@ -711,7 +711,9 @@ class Link(URDFType):
                 meshesList.append(m)
             if len(meshesList) == 0:
                 return None
-            self._collision_mesh = (meshesList[0] + meshesList[1:])
+            self._collision_mesh = meshesList[0]
+            for otherMesh in meshesList[1:]:
+                self._collision_mesh = self._collision_mesh + otherMesh
         return self._collision_mesh
 
     def copy(self, prefix='', scale=None, collision_only=False):
@@ -735,13 +737,16 @@ class Link(URDFType):
                 if not isinstance(scale, (list, np.ndarray)):
                     scale = np.repeat(scale, 3)
                 sm[:3,:3] = np.diag(scale)
-                cm = self.collision_mesh.copy()
-                cm.density = self.inertial.mass / cm.volume
-                cm.apply_transform(sm)
+                cm = copy.deepcopy(self.collision_mesh)
+                cm.transform(sm)
                 cmm = np.eye(4)
-                cmm[:3,3] = cm.center_mass
-                inertial = Inertial(mass=cm.mass, inertia=cm.moment_inertia,
-                                    origin=cmm)
+                cmm[:3,3] = cm.get_center()
+                inertial = Inertial(
+                    mass=0,
+                    inertia=np.zeros((3,3),
+                    dtype=np.float64),
+                    origin=cmm
+                )
 
         visuals = None
         if not collision_only:

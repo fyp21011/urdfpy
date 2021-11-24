@@ -1,3 +1,4 @@
+import copy
 import os
 
 from lxml import etree as ET
@@ -327,7 +328,7 @@ class Mesh(URDFType):
 
         # Export the meshes as a single file
         meshes = self.meshes
-        if len(meshes) == 1:
+        if isinstance(meshes, list) and len(meshes) == 1:
             meshes = meshes[0]
         o3d.io.write_triangle_mesh(fn, meshes)
 
@@ -348,15 +349,14 @@ class Mesh(URDFType):
         :class:`.Sphere`
             A deep copy.
         """
-        meshes = [m.copy() for m in self.meshes]
+        meshes = copy.deepcopy(self.meshes)
         if scale is not None:
             sm = np.eye(4)
             if isinstance(scale, (list, np.ndarray)):
                 sm[:3,:3] = np.diag(scale)
             else:
                 sm[:3,:3] = np.diag(np.repeat(scale, 3))
-            for i, m in enumerate(meshes):
-                meshes[i] = m.apply_transform(sm)
+            meshes = meshes.transform(sm)
         base, fn = os.path.split(self.filename)
         fn = '{}{}'.format(prefix, self.filename)
         m = Mesh(
@@ -626,7 +626,7 @@ class Material(URDFType):
     @color.setter
     def color(self, value):
         if value is not None:
-            value = np.asanyarray(value).astype(np.float)
+            value = np.asanyarray(value).astype(float)
             value = np.clip(value, 0.0, 1.0)
             if value.shape != (4,):
                 raise ValueError('Color must be a (4,) float')

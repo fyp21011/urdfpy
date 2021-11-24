@@ -1,6 +1,6 @@
 import numpy as np
 import pytest
-import trimesh
+import open3d as o3d
 
 from urdfpy import URDF, Link, Joint, Transmission, Material
 
@@ -80,12 +80,12 @@ def test_urdfpy(tmpdir):
     for _ in range(1000):
         fk = u.collision_mesh_fk(cfg=cfg)
         for key in fk:
-            assert isinstance(key, trimesh.Trimesh)
+            assert isinstance(key, o3d.geometry.TriangleMesh)
             assert fk[key].shape == (4,4)
     cfg = {j.name: np.random.uniform(size=1000) for j in u.actuated_joints}
     fk = u.collision_mesh_fk_batch(cfgs=cfg)
     for key in fk:
-        assert isinstance(key, trimesh.Trimesh)
+        assert isinstance(key, o3d.geometry.TriangleMesh)
         assert fk[key].shape == (1000,4,4)
 
     # Test save
