@@ -1243,68 +1243,7 @@ class URDF(URDFType):
             return {ell.name: fk[ell] for ell in fk}
         return fk
 
-    def visual_geometry_fk(self, cfg=None, links=None):
-        """Computes the poses of the URDF's visual geometries using fk.
-
-        Parameters
-        ----------
-        cfg : dict or (n), float
-            A map from joints or joint names to configuration values for
-            each joint, or a list containing a value for each actuated joint
-            in sorted order from the base link.
-            If not specified, all joints are assumed to be in their default
-            configurations.
-        links : list of str or list of :class:`.Link`
-            The links or names of links to perform forward kinematics on.
-            Only geometries from these links will be in the returned map.
-            If not specified, all links are returned.
-
-        Returns
-        -------
-        fk : dict
-            A map from :class:`Geometry` objects that are part of the visual
-            elements of the specified links to the 4x4 homogenous transform
-            matrices that position them relative to the base link's frame.
-        """
-        lfk = self.link_fk(cfg=cfg, links=links)
-
-        fk = OrderedDict()
-        for link in lfk:
-            for visual in link.visuals:
-                fk[visual.geometry] = lfk[link].dot(visual.origin)
-        return fk
-
-    def visual_geometry_fk_batch(self, cfgs=None, links=None):
-        """Computes the poses of the URDF's visual geometries using fk.
-
-        Parameters
-        ----------
-        cfgs : dict, list of dict, or (n,m), float
-            One of the following: (A) a map from joints or joint names to vectors
-            of joint configuration values, (B) a list of maps from joints or joint names
-            to single configuration values, or (C) a list of ``n`` configuration vectors,
-            each of which has a vector with an entry for each actuated joint.
-        links : list of str or list of :class:`.Link`
-            The links or names of links to perform forward kinematics on.
-            Only geometries from these links will be in the returned map.
-            If not specified, all links are returned.
-
-        Returns
-        -------
-        fk : dict
-            A map from :class:`Geometry` objects that are part of the visual
-            elements of the specified links to the 4x4 homogenous transform
-            matrices that position them relative to the base link's frame.
-        """
-        lfk = self.link_fk_batch(cfgs=cfgs, links=links)
-
-        fk = OrderedDict()
-        for link in lfk:
-            for visual in link.visuals:
-                fk[visual.geometry] = np.matmul(lfk[link], visual.origin)
-        return fk
-
-    def visual_trimesh_fk(self, cfg=None, links=None):
+    def visual_mesh_fk(self, cfg=None, links=None):
         """Computes the poses of the URDF's visual trimeshes using fk.
 
         Parameters
@@ -1333,116 +1272,17 @@ class URDF(URDFType):
         fk = OrderedDict()
         for link in lfk:
             for visual in link.visuals:
-                for mesh in visual.geometry.meshes:
-                    pose = lfk[link].dot(visual.origin)
-                    if visual.geometry.mesh is not None:
-                        if visual.geometry.mesh.scale is not None:
-                            S = np.eye(4, dtype=np.float64)
-                            S[:3,:3] = np.diag(visual.geometry.mesh.scale)
-                            pose = pose.dot(S)
-                    fk[mesh] = pose
+                geometryMesh = visual.geometry.meshes
+                pose = lfk[link].dot(visual.origin)
+                if visual.geometry.mesh is not None:
+                    if visual.geometry.mesh.scale is not None:
+                        S = np.eye(4, dtype=np.float64)
+                        S[:3,:3] = np.diag(visual.geometry.mesh.scale)
+                        pose = pose.dot(S)
+                fk[geometryMesh] = pose
         return fk
 
-    def visual_trimesh_fk_batch(self, cfgs=None, links=None):
-        """Computes the poses of the URDF's visual trimeshes using fk.
-
-        Parameters
-        ----------
-        cfgs : dict, list of dict, or (n,m), float
-            One of the following: (A) a map from joints or joint names to vectors
-            of joint configuration values, (B) a list of maps from joints or joint names
-            to single configuration values, or (C) a list of ``n`` configuration vectors,
-            each of which has a vector with an entry for each actuated joint.
-        links : list of str or list of :class:`.Link`
-            The links or names of links to perform forward kinematics on.
-            Only trimeshes from these links will be in the returned map.
-            If not specified, all links are returned.
-
-        Returns
-        -------
-        fk : dict
-            A map from :class:`~trimesh.base.Trimesh` objects that are
-            part of the visual geometry of the specified links to the
-            4x4 homogenous transform matrices that position them relative
-            to the base link's frame.
-        """
-        lfk = self.link_fk_batch(cfgs=cfgs, links=links)
-
-        fk = OrderedDict()
-        for link in lfk:
-            for visual in link.visuals:
-                for mesh in visual.geometry.meshes:
-                    poses = np.matmul(lfk[link], visual.origin)
-                    if visual.geometry.mesh is not None:
-                        if visual.geometry.mesh.scale is not None:
-                            S = np.eye(4, dtype=np.float64)
-                            S[:3,:3] = np.diag(visual.geometry.mesh.scale)
-                            poses = np.matmul(poses, S)
-                    fk[mesh] = poses
-        return fk
-
-    def collision_geometry_fk(self, cfg=None, links=None):
-        """Computes the poses of the URDF's collision geometries using fk.
-
-        Parameters
-        ----------
-        cfg : dict or (n), float
-            A map from joints or joint names to configuration values for
-            each joint, or a list containing a value for each actuated joint
-            in sorted order from the base link.
-            If not specified, all joints are assumed to be in their default
-            configurations.
-        links : list of str or list of :class:`.Link`
-            The links or names of links to perform forward kinematics on.
-            Only geometries from these links will be in the returned map.
-            If not specified, all links are returned.
-
-        Returns
-        -------
-        fk : dict
-            A map from :class:`Geometry` objects that are part of the collision
-            elements of the specified links to the 4x4 homogenous transform
-            matrices that position them relative to the base link's frame.
-        """
-        lfk = self.link_fk(cfg=cfg, links=links)
-
-        fk = OrderedDict()
-        for link in lfk:
-            for collision in link.collisions:
-                fk[collision] = lfk[link].dot(collision.origin)
-        return fk
-
-    def collision_geometry_fk_batch(self, cfgs=None, links=None):
-        """Computes the poses of the URDF's collision geometries using fk.
-
-        Parameters
-        ----------
-        cfgs : dict, list of dict, or (n,m), float
-            One of the following: (A) a map from joints or joint names to vectors
-            of joint configuration values, (B) a list of maps from joints or joint names
-            to single configuration values, or (C) a list of ``n`` configuration vectors,
-            each of which has a vector with an entry for each actuated joint.
-        links : list of str or list of :class:`.Link`
-            The links or names of links to perform forward kinematics on.
-            Only geometries from these links will be in the returned map.
-            If not specified, all links are returned.
-
-        Returns
-        -------
-        fk : dict
-            A map from :class:`Geometry` objects that are part of the collision
-            elements of the specified links to the 4x4 homogenous transform
-            matrices that position them relative to the base link's frame.
-        """
-        lfk = self.link_fk_batch(cfgs=cfgs, links=links)
-
-        fk = OrderedDict()
-        for link in lfk:
-            for collision in link.collisions:
-                fk[collision] = np.matmul(lfk[link], collision.origin)
-        return fk
-
-    def collision_trimesh_fk(self, cfg=None, links=None):
+    def collision_mesh_fk(self, cfg=None, links=None):
         """Computes the poses of the URDF's collision trimeshes using fk.
 
         Parameters
@@ -1476,7 +1316,7 @@ class URDF(URDFType):
                 fk[cm] = pose
         return fk
 
-    def collision_trimesh_fk_batch(self, cfgs=None, links=None):
+    def collision_mesh_fk_batch(self, cfgs=None, links=None):
         """Computes the poses of the URDF's collision trimeshes using fk.
 
         Parameters
@@ -1508,202 +1348,6 @@ class URDF(URDFType):
             if cm is not None:
                 fk[cm] = poses
         return fk
-
-    def animate(self, cfg_trajectory=None, loop_time=3.0, use_collision=False):
-        """Animate the URDF through a configuration trajectory.
-
-        Parameters
-        ----------
-        cfg_trajectory : dict or (m,n) float
-            A map from joints or joint names to lists of configuration values
-            for each joint along the trajectory, or a vector of
-            vectors where the second dimension contains a value for each joint.
-            If not specified, all joints will articulate from limit to limit.
-            The trajectory steps are assumed to be equally spaced out in time.
-        loop_time : float
-            The time to loop the animation for, in seconds. The trajectory
-            will play fowards and backwards during this time, ending
-            at the inital configuration.
-        use_collision : bool
-            If True, the collision geometry is visualized instead of
-            the visual geometry.
-
-        Examples
-        --------
-
-        You can run this without specifying a ``cfg_trajectory`` to view
-        the full articulation of the URDF
-
-        >>> robot = URDF.load('ur5.urdf')
-        >>> robot.animate()
-
-        .. image:: /_static/ur5.gif
-
-        >>> ct = {'shoulder_pan_joint': [0.0, 2 * np.pi]}
-        >>> robot.animate(cfg_trajectory=ct)
-
-        .. image:: /_static/ur5_shoulder.gif
-
-        >>> ct = {
-        ...    'shoulder_pan_joint' : [-np.pi / 4, np.pi / 4],
-        ...    'shoulder_lift_joint' : [0.0, -np.pi / 2.0],
-        ...    'elbow_joint' : [0.0, np.pi / 2.0]
-        ... }
-        >>> robot.animate(cfg_trajectory=ct)
-
-        .. image:: /_static/ur5_three_joints.gif
-
-        """
-        import pyrender  # Save pyrender import for here for CI
-
-        ct = cfg_trajectory
-
-        traj_len = None  # Length of the trajectory in steps
-        ct_np = {}       # Numpyified trajectory
-
-        # If trajectory not specified, articulate between the limits.
-        if ct is None:
-            lb, ub = self.joint_limit_cfgs
-            if len(lb) > 0:
-                traj_len = 2
-                ct_np = {k: np.array([lb[k], ub[k]]) for k in lb}
-
-        # If it is specified, parse it and extract the trajectory length.
-        elif isinstance(ct, dict):
-            if len(ct) > 0:
-                for k in ct:
-                    val = np.asanyarray(ct[k]).astype(np.float64)
-                    if traj_len is None:
-                        traj_len = len(val)
-                    elif traj_len != len(val):
-                        raise ValueError('Trajectories must be same length')
-                    ct_np[k] = val
-        elif isinstance(ct, (list, tuple, np.ndarray)):
-            ct = np.asanyarray(ct).astype(np.float64)
-            if ct.ndim == 1:
-                ct = ct.reshape(-1, 1)
-            if ct.ndim != 2 or ct.shape[1] != len(self.actuated_joints):
-                raise ValueError('Cfg trajectory must have entry for each joint')
-            ct_np = {j: ct[:,i] for i, j in enumerate(self.actuated_joints)}
-        else:
-            raise TypeError('Invalid type for cfg_trajectory: {}'
-                            .format(type(cfg_trajectory)))
-
-        # If there isn't a trajectory to render, just show the model and exit
-        if len(ct_np) == 0 or traj_len < 2:
-            self.show(use_collision=use_collision)
-            return
-
-        # Create an array of times that loops from 0 to 1 and back to 0
-        fps = 30.0
-        n_steps = int(loop_time * fps / 2.0)
-        times = np.linspace(0.0, 1.0, n_steps)
-        times = np.hstack((times, np.flip(times)))
-
-        # Create bin edges in the range [0, 1] for each trajectory step
-        bins = np.arange(traj_len) / (float(traj_len) - 1.0)
-
-        # Compute alphas for each time
-        right_inds = np.digitize(times, bins, right=True)
-        right_inds[right_inds == 0] = 1
-        alphas = ((bins[right_inds] - times) /
-                  (bins[right_inds] - bins[right_inds - 1]))
-
-        # Create the new interpolated trajectory
-        new_ct = {}
-        for k in ct_np:
-            new_ct[k] = (alphas * ct_np[k][right_inds - 1] +
-                         (1.0 - alphas) * ct_np[k][right_inds])
-
-        # Create the scene
-        if use_collision:
-            fk = self.collision_trimesh_fk()
-        else:
-            fk = self.visual_trimesh_fk()
-
-        node_map = {}
-        scene = pyrender.Scene()
-        for tm in fk:
-            pose = fk[tm]
-            mesh = pyrender.Mesh.from_trimesh(tm, smooth=False)
-            node = scene.add(mesh, pose=pose)
-            node_map[tm] = node
-
-        # Get base pose to focus on
-        blp = self.link_fk(links=[self.base_link])[self.base_link]
-
-        # Pop the visualizer asynchronously
-        v = pyrender.Viewer(scene, run_in_thread=True,
-                            use_raymond_lighting=True,
-                            view_center=blp[:3,3])
-
-        # Now, run our loop
-        i = 0
-        while v.is_active:
-            cfg = {k: new_ct[k][i] for k in new_ct}
-            i = (i + 1) % len(times)
-
-            if use_collision:
-                fk = self.collision_trimesh_fk(cfg=cfg)
-            else:
-                fk = self.visual_trimesh_fk(cfg=cfg)
-
-            v.render_lock.acquire()
-            for mesh in fk:
-                pose = fk[mesh]
-                node_map[mesh].matrix = pose
-            v.render_lock.release()
-
-            time.sleep(1.0 / fps)
-
-    def show(self, cfg=None, use_collision=False):
-        """Visualize the URDF in a given configuration.
-
-        Parameters
-        ----------
-        cfg : dict or (n), float
-            A map from joints or joint names to configuration values for
-            each joint, or a list containing a value for each actuated joint
-            in sorted order from the base link.
-            If not specified, all joints are assumed to be in their default
-            configurations.
-        use_collision : bool
-            If True, the collision geometry is visualized instead of
-            the visual geometry.
-        """
-        import os
-
-        from PIL import Image
-        import pyrender  # Save pyrender import for here for CI
-
-        if 'PYOPENGL_PLATFORM' in os.environ:
-            offscreen = True
-        else:
-            offscreen = False
-
-        if use_collision:
-            fk = self.collision_trimesh_fk(cfg=cfg)
-        else:
-            fk = self.visual_trimesh_fk(cfg=cfg)
-
-        scene = pyrender.Scene()
-        for tm in fk:
-            _pose = fk[tm]
-            mesh = pyrender.Mesh.from_trimesh(tm, smooth=False)
-            scene.add(mesh, pose=_pose)
-        if offscreen:
-            # create a camera
-            _camera = pyrender.OrthographicCamera(xmag=1.0, ymag=1.0)
-            _cameraNode = pyrender.Node(camera = _camera)
-            scene.add_node(_cameraNode)
-            # create the renderer
-            offscreenRenderer = pyrender.OffscreenRenderer(viewport_width=640, viewport_height=480, point_size=1.0)
-            
-            colors, depth = offscreenRenderer.render(scene)
-            print(f"DEBUG: offscreenRenderer.render(scene) => {colors.shape} {depth.shape}")
-            Image.fromarray(colors.astype('uint8'), mode='RGB').save(f"{self.name}.jpg")
-        else:
-            pyrender.Viewer(scene, use_raymond_lighting=True)
 
     def copy(self, name=None, prefix='', scale=None, collision_only=False):
         """Make a deep copy of the URDF.
