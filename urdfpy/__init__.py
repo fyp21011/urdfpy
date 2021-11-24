@@ -5,7 +5,7 @@ if 'DISPLAY' not in os.environ or len(os.environ['DISPLAY']) == 0:
 from urdfpy.urdf import (URDFType,
                    Box, Cylinder, Sphere, Mesh, Geometry,
                    Texture, Material,
-                   Collision, Visual, Inertial,
+                   Collision, Visual,
                    JointCalibration, JointDynamics, JointLimit, JointMimic,
                    SafetyController, Actuator, TransmissionJoint,
                    Transmission, Joint, Link, URDF)
@@ -14,7 +14,7 @@ from .utils import (rpy_to_matrix, matrix_to_rpy, xyz_rpy_to_matrix,
 
 __all__ = [
     'URDFType', 'Box', 'Cylinder', 'Sphere', 'Mesh', 'Geometry',
-    'Texture', 'Material', 'Collision', 'Visual', 'Inertial',
+    'Texture', 'Material', 'Collision', 'Visual',
     'JointCalibration', 'JointDynamics', 'JointLimit', 'JointMimic',
     'SafetyController', 'Actuator', 'TransmissionJoint',
     'Transmission', 'Joint', 'Link', 'URDF',

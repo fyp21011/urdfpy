@@ -8,8 +8,7 @@ from .link import (
     Texture,
     Material,
     Collision,
-    Visual,
-    Inertial
+    Visual
 )
 from .joint import (
     JointCalibration,

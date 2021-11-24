@@ -17,7 +17,7 @@ from urdfpy.urdf.joint import (
     JointMimic,
     SafetyController
 )
-from urdfpy.urdf.link import Collision, Inertial, Material, Visual
+from urdfpy.urdf.link import Collision, Material, Visual
 from urdfpy.urdf.transmission import TransmissionJoint, Actuator
 from urdfpy.utils import parse_origin, unparse_origin, configure_origin
 
@@ -600,8 +600,6 @@ class Link(URDFType):
     ----------
     name : str
         The name of the link.
-    inertial : :class:`.Inertial`, optional
-        The inertial properties of the link.
     visuals : list of :class:`.Visual`, optional
         The visual properties of the link.
     collsions : list of :class:`.Collision`, optional
@@ -612,15 +610,13 @@ class Link(URDFType):
         'name': (str, True),
     }
     _ELEMENTS = {
-        'inertial': (Inertial, False, False),
         'visuals': (Visual, False, True),
         'collisions': (Collision, False, True),
     }
     _TAG = 'link'
 
-    def __init__(self, name, inertial, visuals, collisions):
+    def __init__(self, name, visuals, collisions):
         self.name = name
-        self.inertial = inertial
         self.visuals = visuals
         self.collisions = collisions
 
@@ -635,21 +631,6 @@ class Link(URDFType):
     @name.setter
     def name(self, value):
         self._name = str(value)
-
-    @property
-    def inertial(self):
-        """:class:`.Inertial` : Inertial properties of the link.
-        """
-        return self._inertial
-
-    @inertial.setter
-    def inertial(self, value):
-        if value is not None and not isinstance(value, Inertial):
-            raise TypeError('Expected Inertial object')
-        # Set default inertial
-        if value is None:
-            value = Inertial(mass=1.0, inertia=np.eye(3))
-        self._inertial = value
 
     @property
     def visuals(self):
@@ -729,24 +710,14 @@ class Link(URDFType):
         link : :class:`.Link`
             A deep copy of the Link.
         """
-        inertial = self.inertial.copy() if self.inertial is not None else None
         cm = self._collision_mesh
-        if scale is not None:
-            if self.collision_mesh is not None and self.inertial is not None:
-                sm = np.eye(4)
-                if not isinstance(scale, (list, np.ndarray)):
-                    scale = np.repeat(scale, 3)
-                sm[:3,:3] = np.diag(scale)
-                cm = copy.deepcopy(self.collision_mesh)
-                cm.transform(sm)
-                cmm = np.eye(4)
-                cmm[:3,3] = cm.get_center()
-                inertial = Inertial(
-                    mass=0,
-                    inertia=np.zeros((3,3),
-                    dtype=np.float64),
-                    origin=cmm
-                )
+        if scale is not None and self.collision_mesh is not None:
+            sm = np.eye(4)
+            if not isinstance(scale, (list, np.ndarray)):
+                scale = np.repeat(scale, 3)
+            sm[:3,:3] = np.diag(scale)
+            cm = copy.deepcopy(self.collision_mesh)
+            cm.transform(sm)
 
         visuals = None
         if not collision_only:
@@ -754,7 +725,6 @@ class Link(URDFType):
 
         cpy = Link(
             name='{}{}'.format(prefix, self.name),
-            inertial=inertial,
             visuals=visuals,
             collisions=[v.copy(prefix=prefix, scale=scale) for v in self.collisions],
         )
