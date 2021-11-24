@@ -414,10 +414,11 @@ class Joint(URDFType):
             return self.origin
         elif self.joint_type in ['revolute', 'continuous']:
             if cfg is None:
-                cfg = 0.0
+                angle = 0.0
             else:
-                cfg = float(cfg)
-            R = o3d.geometry.get_rotation_matrix_from_xyz(cfg * self.axis)
+                angle = float(cfg)
+            R = np.eye(4)
+            R[:3, :3] = o3d.geometry.get_rotation_matrix_from_axis_angle(angle * self.axis)
             return self.origin.dot(R)
         elif self.joint_type == 'prismatic':
             if cfg is None:
