@@ -6,9 +6,11 @@ def main(path:str, animate:bool=True, nogui:bool=False):
     robot = URDF.load(path)
     if not nogui:
         if animate:
-            robot.animate()
+            # robot.animate()
+            pass
         else:
-            robot.show()
+            # robot.show()
+            pass
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
