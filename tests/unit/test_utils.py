@@ -1,5 +1,4 @@
 import numpy as np
-import trimesh.transformations as tfs
 from open3d import geometry as o3dgm
 
 from urdfpy import (rpy_to_matrix, matrix_to_rpy, matrix_to_xyz_rpy,

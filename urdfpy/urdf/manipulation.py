@@ -1,12 +1,10 @@
 from collections import OrderedDict
 import copy
 import os
-import time
 
 from lxml import etree as ET
 import networkx as nx
 import numpy as np
-import open3d as o3d
 import six
 
 from urdfpy.urdf.base import URDFType
@@ -501,7 +499,7 @@ class URDF(URDFType):
         return fk
 
     def visual_mesh_fk(self, cfg=None, links=None):
-        """Computes the poses of the URDF's visual trimeshes using fk.
+        """Computes the poses of the URDF's visual triangle mesh using fk.
 
         Parameters
         ----------
@@ -513,13 +511,13 @@ class URDF(URDFType):
             configurations.
         links : list of str or list of :class:`.Link`
             The links or names of links to perform forward kinematics on.
-            Only trimeshes from these links will be in the returned map.
+            Only meshes from these links will be in the returned map.
             If not specified, all links are returned.
 
         Returns
         -------
         fk : dict
-            A map from :class:`~trimesh.base.Trimesh` objects that are
+            A map from :class:`open3d.geometry.TriangleMesh` objects that are
             part of the visual geometry of the specified links to the
             4x4 homogenous transform matrices that position them relative
             to the base link's frame.
@@ -540,7 +538,7 @@ class URDF(URDFType):
         return fk
 
     def collision_mesh_fk(self, cfg=None, links=None):
-        """Computes the poses of the URDF's collision trimeshes using fk.
+        """Computes the poses of the URDF's collision mesh using fk.
 
         Parameters
         ----------
@@ -552,13 +550,13 @@ class URDF(URDFType):
             configurations.
         links : list of str or list of :class:`.Link`
             The links or names of links to perform forward kinematics on.
-            Only trimeshes from these links will be in the returned map.
+            Only triangle meshes from these links will be in the returned map.
             If not specified, all links are returned.
 
         Returns
         -------
         fk : dict
-            A map from :class:`~trimesh.base.Trimesh` objects that are
+            A map from :class:`open3d.geometry.TriangleMesh` objects that are
             part of the collision geometry of the specified links to the
             4x4 homogenous transform matrices that position them relative
             to the base link's frame.
@@ -574,7 +572,7 @@ class URDF(URDFType):
         return fk
 
     def collision_mesh_fk_batch(self, cfgs=None, links=None):
-        """Computes the poses of the URDF's collision trimeshes using fk.
+        """Computes the poses of the URDF's collision mesh using fk.
 
         Parameters
         ----------
@@ -585,13 +583,13 @@ class URDF(URDFType):
             each of which has a vector with an entry for each actuated joint.
         links : list of str or list of :class:`.Link`
             The links or names of links to perform forward kinematics on.
-            Only trimeshes from these links will be in the returned map.
+            Only triangle meshes from these links will be in the returned map.
             If not specified, all links are returned.
 
         Returns
         -------
         fk : dict
-            A map from :class:`~trimesh.base.Trimesh` objects that are
+            A map from :class:`open3d.geometry.TriangleMesh` objects that are
             part of the collision geometry of the specified links to the
             4x4 homogenous transform matrices that position them relative
             to the base link's frame.

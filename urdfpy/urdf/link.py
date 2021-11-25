@@ -15,7 +15,7 @@ from urdfpy.utils import (
 )
 
 class Texture(URDFType):
-    """An image-based texture.
+    """An image-based texture, as an embedded element in Material
 
     Parameters
     ----------
@@ -102,7 +102,7 @@ class Texture(URDFType):
         return v
 
 class Material(URDFType):
-    """A material for some geometry.
+    """A material for a Visual object, associated with some geometry.
 
     Parameters
     ----------
@@ -404,7 +404,7 @@ class Link(URDFType):
 
     @property
     def collision_mesh(self):
-        """:class:`~trimesh.base.Trimesh` : A single collision mesh for
+        """:class:`open3d.geometry.TriangleMesh` : A single collision mesh for
         the link, specified in the link frame, or None if there isn't one.
         """
         if len(self.collisions) == 0:
