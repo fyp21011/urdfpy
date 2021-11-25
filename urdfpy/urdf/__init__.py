@@ -22,7 +22,7 @@ from .joint import (
     Joint
 )
 from .manipulation import (
-    URDF
+    Robot
 )
 from .transmission import (
     TransmissionJoint,

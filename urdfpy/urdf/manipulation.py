@@ -12,8 +12,8 @@ from urdfpy.urdf.joint import Joint
 from urdfpy.urdf.transmission import Transmission
 from urdfpy.urdf.link import Material, Link
 
-class URDF(URDFType):
-    """The top-level URDF specification.
+class Robot(URDFType):
+    """The top-level URDF specification for a robot.
 
     The URDF encapsulates an articulated object, such as a robot or a gripper.
     It is made of links and joints that tie them together and define their
@@ -624,7 +624,7 @@ class URDF(URDFType):
         copy : :class:`.URDF`
             The copied URDF.
         """
-        return URDF(
+        return Robot(
             name = (name if name else self.name),
             links=[v.copy(prefix, scale, collision_only) for v in self.links],
             joints=[v.copy(prefix, scale) for v in self.joints],
@@ -713,7 +713,7 @@ class URDF(URDFType):
             origin=origin
         ))
 
-        return URDF(name=name, links=links, joints=joints, transmissions=transmissions,
+        return Robot(name=name, links=links, joints=joints, transmissions=transmissions,
                     materials=materials)
 
     def _merge_materials(self):
@@ -760,7 +760,7 @@ class URDF(URDFType):
             path, _ = os.path.split(file_obj.name)
 
         node = tree.getroot()
-        return URDF._from_xml(node, path)
+        return Robot._from_xml(node, path)
 
     def _validate_joints(self):
         """Raise an exception of any joints are invalidly specified.
@@ -966,7 +966,7 @@ class URDF(URDFType):
 
         data = ET.tostring(extra_xml_node)
         kwargs['other_xml'] = data
-        return URDF(**kwargs)
+        return Robot(**kwargs)
 
     def _to_xml(self, parent, path):
         node = self._unparse(path)

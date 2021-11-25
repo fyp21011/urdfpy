@@ -1,9 +1,9 @@
 import argparse
 
-from urdfpy import URDF
+from urdfpy import Robot
 
 def main(path:str, animate:bool=True, nogui:bool=False):
-    robot = URDF.load(path)
+    robot = Robot.load(path)
     if not nogui:
         if animate:
             # robot.animate()

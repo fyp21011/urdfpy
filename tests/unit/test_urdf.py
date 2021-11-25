@@ -2,16 +2,16 @@ import numpy as np
 import pytest
 import open3d as o3d
 
-from urdfpy import URDF, Link, Joint, Transmission, Material
+from urdfpy import Robot, Link, Joint, Transmission, Material
 
 
 def test_urdfpy(tmpdir):
     outfn = tmpdir.mkdir('urdf').join('ur5.urdf').strpath
 
     # Load
-    u = URDF.load('tests/data/ur5/ur5.urdf')
+    u = Robot.load('tests/data/ur5/ur5.urdf')
 
-    assert isinstance(u, URDF)
+    assert isinstance(u, Robot)
     for j in u.joints:
         assert isinstance(j, Joint)
     for l in u.links:
@@ -91,7 +91,7 @@ def test_urdfpy(tmpdir):
     # Test save
     u.save(outfn)
 
-    nu = URDF.load(outfn)
+    nu = Robot.load(outfn)
     assert len(u.links) == len(nu.links)
     assert len(u.joints) == len(nu.joints)
 
@@ -99,13 +99,13 @@ def test_urdfpy(tmpdir):
     with pytest.raises(ValueError):
         x = u.join(u, link=u.link_map['tool0'])
     x = u.join(u, link=u.link_map['tool0'], name='copy', prefix='prefix')
-    assert isinstance(x, URDF)
+    assert isinstance(x, Robot)
     assert x.name == 'copy'
     assert len(x.joints) == 2 * len(u.joints) + 1
     assert len(x.links) == 2 * len(u.links)
 
     # Test scale
     x = u.copy(scale=3)
-    assert isinstance(x, URDF)
+    assert isinstance(x, Robot)
     x = x.copy(scale=[1,1,3])
-    assert isinstance(x, URDF)
+    assert isinstance(x, Robot)

@@ -8,7 +8,7 @@ from urdfpy.urdf import (URDFType,
                    Collision, Visual,
                    JointCalibration, JointDynamics, JointLimit, JointMimic,
                    SafetyController, Actuator, TransmissionJoint,
-                   Transmission, Joint, Link, URDF)
+                   Transmission, Joint, Link, Robot)
 from .utils import (rpy_to_matrix, matrix_to_rpy, xyz_rpy_to_matrix,
                     matrix_to_xyz_rpy)
 
@@ -17,7 +17,7 @@ __all__ = [
     'Texture', 'Material', 'Collision', 'Visual',
     'JointCalibration', 'JointDynamics', 'JointLimit', 'JointMimic',
     'SafetyController', 'Actuator', 'TransmissionJoint',
-    'Transmission', 'Joint', 'Link', 'URDF',
+    'Transmission', 'Joint', 'Link', 'Robot',
     'rpy_to_matrix', 'matrix_to_rpy', 'xyz_rpy_to_matrix', 'matrix_to_xyz_rpy',
     '__version__'
 ]
