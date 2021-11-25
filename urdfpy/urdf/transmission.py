@@ -109,7 +109,6 @@ class Actuator(URDFType):
             hardwareInterfaces=self.hardwareInterfaces.copy(),
         )
 
-
 class TransmissionJoint(URDFType):
     """A transmission joint specification.
 
@@ -191,3 +190,124 @@ class TransmissionJoint(URDFType):
             hardwareInterfaces=self.hardwareInterfaces.copy(),
         )
 
+class Transmission(URDFType):
+    """An element that describes the relationship between an actuator and a
+    joint.
+
+    Parameters
+    ----------
+    name : str
+        The name of this transmission.
+    trans_type : str
+        The type of this transmission.
+    joints : list of :class:`.TransmissionJoint`
+        The joints connected to this transmission.
+    actuators : list of :class:`.Actuator`
+        The actuators connected to this transmission.
+    """
+    _ATTRIBS = {
+        'name': (str, True),
+    }
+    _ELEMENTS = {
+        'joints': (TransmissionJoint, True, True),
+        'actuators': (Actuator, True, True),
+    }
+    _TAG = 'transmission'
+
+    def __init__(self, name, trans_type, joints=None, actuators=None):
+        self.name = name
+        self.trans_type = trans_type
+        self.joints = joints
+        self.actuators = actuators
+
+    @property
+    def name(self):
+        """str : The name of this transmission.
+        """
+        return self._name
+
+    @name.setter
+    def name(self, value):
+        self._name = str(value)
+
+    @property
+    def trans_type(self):
+        """str : The type of this transmission.
+        """
+        return self._trans_type
+
+    @trans_type.setter
+    def trans_type(self, value):
+        self._trans_type = str(value)
+
+    @property
+    def joints(self):
+        """:class:`.TransmissionJoint` : The joints the transmission is
+        connected to.
+        """
+        return self._joints
+
+    @joints.setter
+    def joints(self, value):
+        if value is None:
+            value = []
+        else:
+            value = list(value)
+            for v in value:
+                if not isinstance(v, TransmissionJoint):
+                    raise TypeError(
+                        'Joints expects a list of TransmissionJoint'
+                    )
+        self._joints = value
+
+    @property
+    def actuators(self):
+        """:class:`.Actuator` : The actuators the transmission is connected to.
+        """
+        return self._actuators
+
+    @actuators.setter
+    def actuators(self, value):
+        if value is None:
+            value = []
+        else:
+            value = list(value)
+            for v in value:
+                if not isinstance(v, Actuator):
+                    raise TypeError(
+                        'Actuators expects a list of Actuator'
+                    )
+        self._actuators = value
+
+    @classmethod
+    def _from_xml(cls, node, path):
+        kwargs = cls._parse(node, path)
+        kwargs['trans_type'] = node.find('type').text
+        return Transmission(**kwargs)
+
+    def _to_xml(self, parent, path):
+        node = self._unparse(path)
+        ttype = ET.Element('type')
+        ttype.text = self.trans_type
+        node.append(ttype)
+        return node
+
+    def copy(self, prefix='', scale=None):
+        """Create a deep copy with the prefix applied to all names.
+
+        Parameters
+        ----------
+        prefix : str
+            A prefix to apply to all names.
+
+        Returns
+        -------
+        :class:`.Transmission`
+            A deep copy.
+        """
+        return Transmission(
+            name='{}{}'.format(prefix, self.name),
+            trans_type=self.trans_type,
+            joints=[j.copy(prefix) for j in self.joints],
+            actuators=[a.copy(prefix) for a in self.actuators],
+        )
