@@ -307,12 +307,11 @@ class Mesh(URDFType):
         meshes = load_mesh(fn)
         if combine:
             # Simplify the geometry
-            triCluster, clusterNTriangle, clusterArea = meshes.cluster_connected_triangles()
-            triCluster = np.asarray(triCluster)
-            clusterNTriangle = np.asarray(clusterNTriangle)
-            clusterArea = np.asarray(clusterArea)
-            triangle4Simplify = clusterNTriangle[triCluster] < 100
-            meshes.remove_triangles_by_mask(triangle4Simplify)
+            voxel_size = max(meshes.get_max_bound() - meshes.get_min_bound()) / 32
+            meshes = meshes.simplify_vertex_clustering(
+                voxel_size=voxel_size,
+                contraction=o3d.geometry.SimplificationContraction.Average
+            )
         kwargs['meshes'] = meshes
 
         return Mesh(**kwargs)

@@ -20,6 +20,11 @@ def main(path:str, animate:bool=True, nogui:bool=False):
                 visualMesh.compute_vertex_normals()
                 meshes.append(visualMesh)
             o3d.visualization.draw_geometries(meshes)
+    else:
+        cFk = robot.collision_mesh_fk()
+        for mesh in cFk:
+            assert mesh.has_triangles(), f"{mesh} has no triangles"
+            print(mesh)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
