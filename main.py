@@ -1,16 +1,25 @@
 import argparse
+import copy
 
+import open3d as o3d
 from urdfpy import Robot
 
 def main(path:str, animate:bool=True, nogui:bool=False):
     robot = Robot.load(path)
     if not nogui:
         if animate:
-            # robot.animate()
-            pass
+            raise NotImplementedError()
         else:
-            # robot.show()
-            pass
+            robotFk = robot.visual_mesh_fk()
+            meshes = []
+            for eachMesh in robotFk:
+                visualMesh = copy.deepcopy(eachMesh)
+                # We cannot modify the mesh in the robotFk dict
+                # they are the reference to the origin ones
+                visualMesh.tranform(robotFk[eachMesh])
+                visualMesh.compute_vertex_normals()
+                meshes.append(visualMesh)
+            o3d.visualization.draw_geometries(meshes)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
