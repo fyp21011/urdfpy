@@ -1,759 +1,19 @@
 from collections import OrderedDict
 import copy
 import os
-import time
 
 from lxml import etree as ET
 import networkx as nx
 import numpy as np
-import trimesh
 import six
 
 from urdfpy.urdf.base import URDFType
-from urdfpy.urdf.joint import (
-    JointCalibration,
-    JointDynamics,
-    JointLimit,
-    JointMimic,
-    SafetyController
-)
-from urdfpy.urdf.link import Collision, Inertial, Material, Visual
-from urdfpy.urdf.transmission import TransmissionJoint, Actuator
-from urdfpy.utils import parse_origin, unparse_origin, configure_origin
-
-
-class Transmission(URDFType):
-    """An element that describes the relationship between an actuator and a
-    joint.
-
-    Parameters
-    ----------
-    name : str
-        The name of this transmission.
-    trans_type : str
-        The type of this transmission.
-    joints : list of :class:`.TransmissionJoint`
-        The joints connected to this transmission.
-    actuators : list of :class:`.Actuator`
-        The actuators connected to this transmission.
-    """
-    _ATTRIBS = {
-        'name': (str, True),
-    }
-    _ELEMENTS = {
-        'joints': (TransmissionJoint, True, True),
-        'actuators': (Actuator, True, True),
-    }
-    _TAG = 'transmission'
-
-    def __init__(self, name, trans_type, joints=None, actuators=None):
-        self.name = name
-        self.trans_type = trans_type
-        self.joints = joints
-        self.actuators = actuators
-
-    @property
-    def name(self):
-        """str : The name of this transmission.
-        """
-        return self._name
-
-    @name.setter
-    def name(self, value):
-        self._name = str(value)
-
-    @property
-    def trans_type(self):
-        """str : The type of this transmission.
-        """
-        return self._trans_type
-
-    @trans_type.setter
-    def trans_type(self, value):
-        self._trans_type = str(value)
-
-    @property
-    def joints(self):
-        """:class:`.TransmissionJoint` : The joints the transmission is
-        connected to.
-        """
-        return self._joints
-
-    @joints.setter
-    def joints(self, value):
-        if value is None:
-            value = []
-        else:
-            value = list(value)
-            for v in value:
-                if not isinstance(v, TransmissionJoint):
-                    raise TypeError(
-                        'Joints expects a list of TransmissionJoint'
-                    )
-        self._joints = value
-
-    @property
-    def actuators(self):
-        """:class:`.Actuator` : The actuators the transmission is connected to.
-        """
-        return self._actuators
-
-    @actuators.setter
-    def actuators(self, value):
-        if value is None:
-            value = []
-        else:
-            value = list(value)
-            for v in value:
-                if not isinstance(v, Actuator):
-                    raise TypeError(
-                        'Actuators expects a list of Actuator'
-                    )
-        self._actuators = value
-
-    @classmethod
-    def _from_xml(cls, node, path):
-        kwargs = cls._parse(node, path)
-        kwargs['trans_type'] = node.find('type').text
-        return Transmission(**kwargs)
-
-    def _to_xml(self, parent, path):
-        node = self._unparse(path)
-        ttype = ET.Element('type')
-        ttype.text = self.trans_type
-        node.append(ttype)
-        return node
-
-    def copy(self, prefix='', scale=None):
-        """Create a deep copy with the prefix applied to all names.
-
-        Parameters
-        ----------
-        prefix : str
-            A prefix to apply to all names.
-
-        Returns
-        -------
-        :class:`.Transmission`
-            A deep copy.
-        """
-        return Transmission(
-            name='{}{}'.format(prefix, self.name),
-            trans_type=self.trans_type,
-            joints=[j.copy(prefix) for j in self.joints],
-            actuators=[a.copy(prefix) for a in self.actuators],
-        )
-
-
-class Joint(URDFType):
-    """A connection between two links.
-
-    There are several types of joints, including:
-
-    - ``fixed`` - a joint that cannot move.
-    - ``prismatic`` - a joint that slides along the joint axis.
-    - ``revolute`` - a hinge joint that rotates about the axis with a limited
-      range of motion.
-    - ``continuous`` - a hinge joint that rotates about the axis with an
-      unlimited range of motion.
-    - ``planar`` - a joint that moves in the plane orthogonal to the axis.
-    - ``floating`` - a joint that can move in 6DoF.
-
-    Parameters
-    ----------
-    name : str
-        The name of this joint.
-    parent : str
-        The name of the parent link of this joint.
-    child : str
-        The name of the child link of this joint.
-    joint_type : str
-        The type of the joint. Must be one of :obj:`.Joint.TYPES`.
-    axis : (3,) float, optional
-        The axis of the joint specified in joint frame. Defaults to
-        ``[1,0,0]``.
-    origin : (4,4) float, optional
-        The pose of the child link with respect to the parent link's frame.
-        The joint frame is defined to be coincident with the child link's
-        frame, so this is also the pose of the joint frame with respect to
-        the parent link's frame.
-    limit : :class:`.JointLimit`, optional
-        Limit for the joint. Only required for revolute and prismatic
-        joints.
-    dynamics : :class:`.JointDynamics`, optional
-        Dynamics for the joint.
-    safety_controller : :class`.SafetyController`, optional
-        The safety controller for this joint.
-    calibration : :class:`.JointCalibration`, optional
-        Calibration information for the joint.
-    mimic : :class:`JointMimic`, optional
-        Joint mimicry information.
-    """
-    TYPES = ['fixed', 'prismatic', 'revolute',
-             'continuous', 'floating', 'planar']
-    _ATTRIBS = {
-        'name': (str, True),
-    }
-    _ELEMENTS = {
-        'dynamics': (JointDynamics, False, False),
-        'limit': (JointLimit, False, False),
-        'mimic': (JointMimic, False, False),
-        'safety_controller': (SafetyController, False, False),
-        'calibration': (JointCalibration, False, False),
-    }
-    _TAG = 'joint'
-
-    def __init__(self, name, joint_type, parent, child, axis=None, origin=None,
-                 limit=None, dynamics=None, safety_controller=None,
-                 calibration=None, mimic=None):
-        self.name = name
-        self.parent = parent
-        self.child = child
-        self.joint_type = joint_type
-        self.axis = axis
-        self.origin = origin
-        self.limit = limit
-        self.dynamics = dynamics
-        self.safety_controller = safety_controller
-        self.calibration = calibration
-        self.mimic = mimic
-
-    @property
-    def name(self):
-        """str : Name for this joint.
-        """
-        return self._name
-
-    @name.setter
-    def name(self, value):
-        self._name = str(value)
-
-    @property
-    def joint_type(self):
-        """str : The type of this joint.
-        """
-        return self._joint_type
-
-    @joint_type.setter
-    def joint_type(self, value):
-        value = str(value)
-        if value not in Joint.TYPES:
-            raise ValueError('Unsupported joint type {}'.format(value))
-        self._joint_type = value
-
-    @property
-    def parent(self):
-        """str : The name of the parent link.
-        """
-        return self._parent
-
-    @parent.setter
-    def parent(self, value):
-        self._parent = str(value)
-
-    @property
-    def child(self):
-        """str : The name of the child link.
-        """
-        return self._child
-
-    @child.setter
-    def child(self, value):
-        self._child = str(value)
-
-    @property
-    def axis(self):
-        """(3,) float : The joint axis in the joint frame.
-        """
-        return self._axis
-
-    @axis.setter
-    def axis(self, value):
-        if value is None:
-            value = np.array([1.0, 0.0, 0.0], dtype=np.float64)
-        else:
-            value = np.asanyarray(value, dtype=np.float64)
-            if value.shape != (3,):
-                raise ValueError('Invalid shape for axis, should be (3,)')
-            value = value / np.linalg.norm(value)
-        self._axis = value
-
-    @property
-    def origin(self):
-        """(4,4) float : The pose of child and joint frames relative to the
-        parent link's frame.
-        """
-        return self._origin
-
-    @origin.setter
-    def origin(self, value):
-        self._origin = configure_origin(value)
-
-    @property
-    def limit(self):
-        """:class:`.JointLimit` : The limits for this joint.
-        """
-        return self._limit
-
-    @limit.setter
-    def limit(self, value):
-        if value is None:
-            if self.joint_type in ['prismatic', 'revolute']:
-                raise ValueError('Require joint limit for prismatic and '
-                                 'revolute joints')
-        elif not isinstance(value, JointLimit):
-            raise TypeError('Expected JointLimit type')
-        self._limit = value
-
-    @property
-    def dynamics(self):
-        """:class:`.JointDynamics` : The dynamics for this joint.
-        """
-        return self._dynamics
-
-    @dynamics.setter
-    def dynamics(self, value):
-        if value is not None:
-            if not isinstance(value, JointDynamics):
-                raise TypeError('Expected JointDynamics type')
-        self._dynamics = value
-
-    @property
-    def safety_controller(self):
-        """:class:`.SafetyController` : The safety controller for this joint.
-        """
-        return self._safety_controller
-
-    @safety_controller.setter
-    def safety_controller(self, value):
-        if value is not None:
-            if not isinstance(value, SafetyController):
-                raise TypeError('Expected SafetyController type')
-        self._safety_controller = value
-
-    @property
-    def calibration(self):
-        """:class:`.JointCalibration` : The calibration for this joint.
-        """
-        return self._calibration
-
-    @calibration.setter
-    def calibration(self, value):
-        if value is not None:
-            if not isinstance(value, JointCalibration):
-                raise TypeError('Expected JointCalibration type')
-        self._calibration = value
-
-    @property
-    def mimic(self):
-        """:class:`.JointMimic` : The mimic for this joint.
-        """
-        return self._mimic
-
-    @mimic.setter
-    def mimic(self, value):
-        if value is not None:
-            if not isinstance(value, JointMimic):
-                raise TypeError('Expected JointMimic type')
-        self._mimic = value
-
-    def is_valid(self, cfg):
-        """Check if the provided configuration value is valid for this joint.
-
-        Parameters
-        ----------
-        cfg : float, (2,) float, (6,) float, or (4,4) float
-            The configuration of the joint.
-
-        Returns
-        -------
-        is_valid : bool
-            True if the configuration is valid, and False otherwise.
-        """
-        if self.joint_type not in ['fixed', 'revolute']:
-            return True
-        if self.joint_limit is None:
-            return True
-        cfg = float(cfg)
-        lower = -np.infty
-        upper = np.infty
-        if self.limit.lower is not None:
-            lower = self.limit.lower
-        if self.limit.upper is not None:
-            upper = self.limit.upper
-        return (cfg >= lower and cfg <= upper)
-
-    def get_child_pose(self, cfg=None):
-        """Computes the child pose relative to a parent pose for a given
-        configuration value.
-
-        Parameters
-        ----------
-        cfg : float, (2,) float, (6,) float, or (4,4) float
-            The configuration values for this joint. They are interpreted
-            based on the joint type as follows:
-
-            - ``fixed`` - not used.
-            - ``prismatic`` - a translation along the axis in meters.
-            - ``revolute`` - a rotation about the axis in radians.
-            - ``continuous`` - a rotation about the axis in radians.
-            - ``planar`` - the x and y translation values in the plane.
-            - ``floating`` - the xyz values followed by the rpy values,
-              or a (4,4) matrix.
-
-            If ``cfg`` is ``None``, then this just returns the joint pose.
-
-        Returns
-        -------
-        pose : (4,4) float
-            The pose of the child relative to the parent.
-        """
-        if cfg is None:
-            return self.origin
-        elif self.joint_type == 'fixed':
-            return self.origin
-        elif self.joint_type in ['revolute', 'continuous']:
-            if cfg is None:
-                cfg = 0.0
-            else:
-                cfg = float(cfg)
-            R = trimesh.transformations.rotation_matrix(cfg, self.axis)
-            return self.origin.dot(R)
-        elif self.joint_type == 'prismatic':
-            if cfg is None:
-                cfg = 0.0
-            else:
-                cfg = float(cfg)
-            translation = np.eye(4, dtype=np.float64)
-            translation[:3,3] = self.axis * cfg
-            return self.origin.dot(translation)
-        elif self.joint_type == 'planar':
-            if cfg is None:
-                cfg = np.zeros(2, dtype=np.float64)
-            else:
-                cfg = np.asanyarray(cfg, dtype=np.float64)
-            if cfg.shape != (2,):
-                raise ValueError(
-                    '(2,) float configuration required for planar joints'
-                )
-            translation = np.eye(4, dtype=np.float64)
-            translation[:3,3] = self.origin[:3,:2].dot(cfg)
-            return self.origin.dot(translation)
-        elif self.joint_type == 'floating':
-            if cfg is None:
-                cfg = np.zeros(6, dtype=np.float64)
-            else:
-                cfg = configure_origin(cfg)
-            if cfg is None:
-                raise ValueError('Invalid configuration for floating joint')
-            return self.origin.dot(cfg)
-        else:
-            raise ValueError('Invalid configuration')
-
-    def get_child_poses(self, cfg, n_cfgs):
-        """Computes the child pose relative to a parent pose for a given set of 
-        configuration values.
-
-        Parameters
-        ----------
-        cfg : (n,) float or None
-            The configuration values for this joint. They are interpreted
-            based on the joint type as follows:
-
-            - ``fixed`` - not used.
-            - ``prismatic`` - a translation along the axis in meters.
-            - ``revolute`` - a rotation about the axis in radians.
-            - ``continuous`` - a rotation about the axis in radians.
-            - ``planar`` - Not implemented.
-            - ``floating`` - Not implemented.
-
-            If ``cfg`` is ``None``, then this just returns the joint pose.
-
-        Returns
-        -------
-        poses : (n,4,4) float
-            The poses of the child relative to the parent.
-        """
-        if cfg is None:
-            return np.tile(self.origin, (n_cfgs, 1, 1))
-        elif self.joint_type == 'fixed':
-            return np.tile(self.origin, (n_cfgs, 1, 1))
-        elif self.joint_type in ['revolute', 'continuous']:
-            if cfg is None:
-                cfg = np.zeros(n_cfgs)
-            return np.matmul(self.origin, self._rotation_matrices(cfg, self.axis))
-        elif self.joint_type == 'prismatic':
-            if cfg is None:
-                cfg = np.zeros(n_cfgs)
-            translation = np.tile(np.eye(4), (n_cfgs, 1, 1))
-            translation[:,:3,3] = self.axis * cfg[:,np.newaxis]
-            return np.matmul(self.origin, translation)
-        elif self.joint_type == 'planar':
-            raise NotImplementedError()
-        elif self.joint_type == 'floating':
-            raise NotImplementedError()
-        else:
-            raise ValueError('Invalid configuration')
-
-    @classmethod
-    def _from_xml(cls, node, path):
-        kwargs = cls._parse(node, path)
-        kwargs['joint_type'] = str(node.attrib['type'])
-        kwargs['parent'] = node.find('parent').attrib['link']
-        kwargs['child'] = node.find('child').attrib['link']
-        axis = node.find('axis')
-        if axis is not None:
-            axis = np.fromstring(axis.attrib['xyz'], sep=' ')
-        kwargs['axis'] = axis
-        kwargs['origin'] = parse_origin(node)
-        return Joint(**kwargs)
-
-    def _to_xml(self, parent, path):
-        node = self._unparse(path)
-        parent = ET.Element('parent')
-        parent.attrib['link'] = self.parent
-        node.append(parent)
-        child = ET.Element('child')
-        child.attrib['link'] = self.child
-        node.append(child)
-        if self.axis is not None:
-            axis = ET.Element('axis')
-            axis.attrib['xyz'] = np.array2string(self.axis)[1:-1]
-            node.append(axis)
-        node.append(unparse_origin(self.origin))
-        node.attrib['type'] = self.joint_type
-        return node
-
-    def _rotation_matrices(self, angles, axis):
-        """Compute rotation matrices from angle/axis representations.
-
-        Parameters
-        ----------
-        angles : (n,) float
-            The angles.
-        axis : (3,) float
-            The axis.
-
-        Returns
-        -------
-        rots : (n,4,4)
-            The rotation matrices
-        """
-        axis = axis / np.linalg.norm(axis)
-        sina = np.sin(angles)
-        cosa = np.cos(angles)
-        M = np.tile(np.eye(4), (len(angles), 1, 1))
-        M[:,0,0] = cosa
-        M[:,1,1] = cosa
-        M[:,2,2] = cosa
-        M[:,:3,:3] += (
-            np.tile(np.outer(axis, axis), (len(angles), 1, 1)) *
-            (1.0 - cosa)[:, np.newaxis, np.newaxis]
-        )
-        M[:,:3,:3] += np.tile(np.array([
-            [0.0, -axis[2], axis[1]],
-            [axis[2], 0.0, -axis[0]],
-            [-axis[1], axis[0], 0.0]]
-        ), (len(angles), 1, 1)) * sina[:, np.newaxis, np.newaxis]
-        return M
-
-    def copy(self, prefix='', scale=None):
-        """Create a deep copy of the joint with the prefix applied to all names.
-
-        Parameters
-        ----------
-        prefix : str
-            A prefix to apply to all joint and link names.
-
-        Returns
-        -------
-        :class:`.Joint`
-            A deep copy of the joint.
-        """
-        origin = self.origin.copy()
-        if scale is not None:
-            if not isinstance(scale, (list, np.ndarray)):
-                scale = np.repeat(scale, 3)
-            origin[:3,3] *= scale
-        cpy = Joint(
-            name='{}{}'.format(prefix, self.name),
-            joint_type=self.joint_type,
-            parent='{}{}'.format(prefix, self.parent),
-            child='{}{}'.format(prefix, self.child),
-            axis=self.axis.copy(),
-            origin=origin,
-            limit=(self.limit.copy(prefix, scale) if self.limit else None),
-            dynamics=(self.dynamics.copy(prefix,scale) if self.dynamics else None),
-            safety_controller=(self.safety_controller.copy(prefix, scale) if
-                               self.safety_controller else None),
-            calibration=(self.calibration.copy(prefix, scale) if self.calibration else None),
-            mimic=(self.mimic.copy(prefix=prefix, scale=scale) if self.mimic else None)
-        )
-        return cpy
-
-
-class Link(URDFType):
-    """A link of a rigid object.
-
-    Parameters
-    ----------
-    name : str
-        The name of the link.
-    inertial : :class:`.Inertial`, optional
-        The inertial properties of the link.
-    visuals : list of :class:`.Visual`, optional
-        The visual properties of the link.
-    collsions : list of :class:`.Collision`, optional
-        The collision properties of the link.
-    """
-
-    _ATTRIBS = {
-        'name': (str, True),
-    }
-    _ELEMENTS = {
-        'inertial': (Inertial, False, False),
-        'visuals': (Visual, False, True),
-        'collisions': (Collision, False, True),
-    }
-    _TAG = 'link'
-
-    def __init__(self, name, inertial, visuals, collisions):
-        self.name = name
-        self.inertial = inertial
-        self.visuals = visuals
-        self.collisions = collisions
-
-        self._collision_mesh = None
-
-    @property
-    def name(self):
-        """str : The name of this link.
-        """
-        return self._name
-
-    @name.setter
-    def name(self, value):
-        self._name = str(value)
-
-    @property
-    def inertial(self):
-        """:class:`.Inertial` : Inertial properties of the link.
-        """
-        return self._inertial
-
-    @inertial.setter
-    def inertial(self, value):
-        if value is not None and not isinstance(value, Inertial):
-            raise TypeError('Expected Inertial object')
-        # Set default inertial
-        if value is None:
-            value = Inertial(mass=1.0, inertia=np.eye(3))
-        self._inertial = value
-
-    @property
-    def visuals(self):
-        """list of :class:`.Visual` : The visual properties of this link.
-        """
-        return self._visuals
-
-    @visuals.setter
-    def visuals(self, value):
-        if value is None:
-            value = []
-        else:
-            value = list(value)
-            for v in value:
-                if not isinstance(v, Visual):
-                    raise ValueError('Expected list of Visual objects')
-        self._visuals = value
-
-    @property
-    def collisions(self):
-        """list of :class:`.Collision` : The collision properties of this link.
-        """
-        return self._collisions
-
-    @collisions.setter
-    def collisions(self, value):
-        if value is None:
-            value = []
-        else:
-            value = list(value)
-            for v in value:
-                if not isinstance(v, Collision):
-                    raise ValueError('Expected list of Collision objects')
-        self._collisions = value
-
-    @property
-    def collision_mesh(self):
-        """:class:`~trimesh.base.Trimesh` : A single collision mesh for
-        the link, specified in the link frame, or None if there isn't one.
-        """
-        if len(self.collisions) == 0:
-            return None
-        if self._collision_mesh is None:
-            meshes = []
-            for c in self.collisions:
-                for m in c.geometry.meshes:
-                    m = m.copy()
-                    pose = c.origin
-                    if c.geometry.mesh is not None:
-                        if c.geometry.mesh.scale is not None:
-                            S = np.eye(4)
-                            S[:3,:3] = np.diag(c.geometry.mesh.scale)
-                            pose = pose.dot(S)
-                    m.apply_transform(pose)
-                    meshes.append(m)
-            if len(meshes) == 0:
-                return None
-            self._collision_mesh = (meshes[0] + meshes[1:])
-        return self._collision_mesh
-
-    def copy(self, prefix='', scale=None, collision_only=False):
-        """Create a deep copy of the link.
-
-        Parameters
-        ----------
-        prefix : str
-            A prefix to apply to all joint and link names.
-
-        Returns
-        -------
-        link : :class:`.Link`
-            A deep copy of the Link.
-        """
-        inertial = self.inertial.copy() if self.inertial is not None else None
-        cm = self._collision_mesh
-        if scale is not None:
-            if self.collision_mesh is not None and self.inertial is not None:
-                sm = np.eye(4)
-                if not isinstance(scale, (list, np.ndarray)):
-                    scale = np.repeat(scale, 3)
-                sm[:3,:3] = np.diag(scale)
-                cm = self.collision_mesh.copy()
-                cm.density = self.inertial.mass / cm.volume
-                cm.apply_transform(sm)
-                cmm = np.eye(4)
-                cmm[:3,3] = cm.center_mass
-                inertial = Inertial(mass=cm.mass, inertia=cm.moment_inertia,
-                                    origin=cmm)
-
-        visuals = None
-        if not collision_only:
-            visuals=[v.copy(prefix=prefix, scale=scale) for v in self.visuals]
-
-        cpy = Link(
-            name='{}{}'.format(prefix, self.name),
-            inertial=inertial,
-            visuals=visuals,
-            collisions=[v.copy(prefix=prefix, scale=scale) for v in self.collisions],
-        )
-        cpy._collision_mesh = cm
-        return cpy
-
-
-class URDF(URDFType):
-    """The top-level URDF specification.
+from urdfpy.urdf.joint import Joint
+from urdfpy.urdf.transmission import Transmission
+from urdfpy.urdf.link import Material, Link
+
+class Robot(URDFType):
+    """The top-level URDF specification for a robot.
 
     The URDF encapsulates an articulated object, such as a robot or a gripper.
     It is made of links and joints that tie them together and define their
@@ -1238,8 +498,8 @@ class URDF(URDFType):
             return {ell.name: fk[ell] for ell in fk}
         return fk
 
-    def visual_geometry_fk(self, cfg=None, links=None):
-        """Computes the poses of the URDF's visual geometries using fk.
+    def visual_mesh_fk(self, cfg=None, links=None):
+        """Computes the poses of the URDF's visual triangle mesh using fk.
 
         Parameters
         ----------
@@ -1251,74 +511,13 @@ class URDF(URDFType):
             configurations.
         links : list of str or list of :class:`.Link`
             The links or names of links to perform forward kinematics on.
-            Only geometries from these links will be in the returned map.
+            Only meshes from these links will be in the returned map.
             If not specified, all links are returned.
 
         Returns
         -------
         fk : dict
-            A map from :class:`Geometry` objects that are part of the visual
-            elements of the specified links to the 4x4 homogenous transform
-            matrices that position them relative to the base link's frame.
-        """
-        lfk = self.link_fk(cfg=cfg, links=links)
-
-        fk = OrderedDict()
-        for link in lfk:
-            for visual in link.visuals:
-                fk[visual.geometry] = lfk[link].dot(visual.origin)
-        return fk
-
-    def visual_geometry_fk_batch(self, cfgs=None, links=None):
-        """Computes the poses of the URDF's visual geometries using fk.
-
-        Parameters
-        ----------
-        cfgs : dict, list of dict, or (n,m), float
-            One of the following: (A) a map from joints or joint names to vectors
-            of joint configuration values, (B) a list of maps from joints or joint names
-            to single configuration values, or (C) a list of ``n`` configuration vectors,
-            each of which has a vector with an entry for each actuated joint.
-        links : list of str or list of :class:`.Link`
-            The links or names of links to perform forward kinematics on.
-            Only geometries from these links will be in the returned map.
-            If not specified, all links are returned.
-
-        Returns
-        -------
-        fk : dict
-            A map from :class:`Geometry` objects that are part of the visual
-            elements of the specified links to the 4x4 homogenous transform
-            matrices that position them relative to the base link's frame.
-        """
-        lfk = self.link_fk_batch(cfgs=cfgs, links=links)
-
-        fk = OrderedDict()
-        for link in lfk:
-            for visual in link.visuals:
-                fk[visual.geometry] = np.matmul(lfk[link], visual.origin)
-        return fk
-
-    def visual_trimesh_fk(self, cfg=None, links=None):
-        """Computes the poses of the URDF's visual trimeshes using fk.
-
-        Parameters
-        ----------
-        cfg : dict or (n), float
-            A map from joints or joint names to configuration values for
-            each joint, or a list containing a value for each actuated joint
-            in sorted order from the base link.
-            If not specified, all joints are assumed to be in their default
-            configurations.
-        links : list of str or list of :class:`.Link`
-            The links or names of links to perform forward kinematics on.
-            Only trimeshes from these links will be in the returned map.
-            If not specified, all links are returned.
-
-        Returns
-        -------
-        fk : dict
-            A map from :class:`~trimesh.base.Trimesh` objects that are
+            A map from :class:`open3d.geometry.TriangleMesh` objects that are
             part of the visual geometry of the specified links to the
             4x4 homogenous transform matrices that position them relative
             to the base link's frame.
@@ -1328,56 +527,18 @@ class URDF(URDFType):
         fk = OrderedDict()
         for link in lfk:
             for visual in link.visuals:
-                for mesh in visual.geometry.meshes:
-                    pose = lfk[link].dot(visual.origin)
-                    if visual.geometry.mesh is not None:
-                        if visual.geometry.mesh.scale is not None:
-                            S = np.eye(4, dtype=np.float64)
-                            S[:3,:3] = np.diag(visual.geometry.mesh.scale)
-                            pose = pose.dot(S)
-                    fk[mesh] = pose
+                geometryMesh = visual.geometry.meshes
+                pose = lfk[link].dot(visual.origin)
+                if visual.geometry.mesh is not None:
+                    if visual.geometry.mesh.scale is not None:
+                        S = np.eye(4, dtype=np.float64)
+                        S[:3,:3] = np.diag(visual.geometry.mesh.scale)
+                        pose = pose.dot(S)
+                fk[geometryMesh] = pose
         return fk
 
-    def visual_trimesh_fk_batch(self, cfgs=None, links=None):
-        """Computes the poses of the URDF's visual trimeshes using fk.
-
-        Parameters
-        ----------
-        cfgs : dict, list of dict, or (n,m), float
-            One of the following: (A) a map from joints or joint names to vectors
-            of joint configuration values, (B) a list of maps from joints or joint names
-            to single configuration values, or (C) a list of ``n`` configuration vectors,
-            each of which has a vector with an entry for each actuated joint.
-        links : list of str or list of :class:`.Link`
-            The links or names of links to perform forward kinematics on.
-            Only trimeshes from these links will be in the returned map.
-            If not specified, all links are returned.
-
-        Returns
-        -------
-        fk : dict
-            A map from :class:`~trimesh.base.Trimesh` objects that are
-            part of the visual geometry of the specified links to the
-            4x4 homogenous transform matrices that position them relative
-            to the base link's frame.
-        """
-        lfk = self.link_fk_batch(cfgs=cfgs, links=links)
-
-        fk = OrderedDict()
-        for link in lfk:
-            for visual in link.visuals:
-                for mesh in visual.geometry.meshes:
-                    poses = np.matmul(lfk[link], visual.origin)
-                    if visual.geometry.mesh is not None:
-                        if visual.geometry.mesh.scale is not None:
-                            S = np.eye(4, dtype=np.float64)
-                            S[:3,:3] = np.diag(visual.geometry.mesh.scale)
-                            poses = np.matmul(poses, S)
-                    fk[mesh] = poses
-        return fk
-
-    def collision_geometry_fk(self, cfg=None, links=None):
-        """Computes the poses of the URDF's collision geometries using fk.
+    def collision_mesh_fk(self, cfg=None, links=None):
+        """Computes the poses of the URDF's collision mesh using fk.
 
         Parameters
         ----------
@@ -1389,74 +550,13 @@ class URDF(URDFType):
             configurations.
         links : list of str or list of :class:`.Link`
             The links or names of links to perform forward kinematics on.
-            Only geometries from these links will be in the returned map.
+            Only triangle meshes from these links will be in the returned map.
             If not specified, all links are returned.
 
         Returns
         -------
         fk : dict
-            A map from :class:`Geometry` objects that are part of the collision
-            elements of the specified links to the 4x4 homogenous transform
-            matrices that position them relative to the base link's frame.
-        """
-        lfk = self.link_fk(cfg=cfg, links=links)
-
-        fk = OrderedDict()
-        for link in lfk:
-            for collision in link.collisions:
-                fk[collision] = lfk[link].dot(collision.origin)
-        return fk
-
-    def collision_geometry_fk_batch(self, cfgs=None, links=None):
-        """Computes the poses of the URDF's collision geometries using fk.
-
-        Parameters
-        ----------
-        cfgs : dict, list of dict, or (n,m), float
-            One of the following: (A) a map from joints or joint names to vectors
-            of joint configuration values, (B) a list of maps from joints or joint names
-            to single configuration values, or (C) a list of ``n`` configuration vectors,
-            each of which has a vector with an entry for each actuated joint.
-        links : list of str or list of :class:`.Link`
-            The links or names of links to perform forward kinematics on.
-            Only geometries from these links will be in the returned map.
-            If not specified, all links are returned.
-
-        Returns
-        -------
-        fk : dict
-            A map from :class:`Geometry` objects that are part of the collision
-            elements of the specified links to the 4x4 homogenous transform
-            matrices that position them relative to the base link's frame.
-        """
-        lfk = self.link_fk_batch(cfgs=cfgs, links=links)
-
-        fk = OrderedDict()
-        for link in lfk:
-            for collision in link.collisions:
-                fk[collision] = np.matmul(lfk[link], collision.origin)
-        return fk
-
-    def collision_trimesh_fk(self, cfg=None, links=None):
-        """Computes the poses of the URDF's collision trimeshes using fk.
-
-        Parameters
-        ----------
-        cfg : dict or (n), float
-            A map from joints or joint names to configuration values for
-            each joint, or a list containing a value for each actuated joint
-            in sorted order from the base link.
-            If not specified, all joints are assumed to be in their default
-            configurations.
-        links : list of str or list of :class:`.Link`
-            The links or names of links to perform forward kinematics on.
-            Only trimeshes from these links will be in the returned map.
-            If not specified, all links are returned.
-
-        Returns
-        -------
-        fk : dict
-            A map from :class:`~trimesh.base.Trimesh` objects that are
+            A map from :class:`open3d.geometry.TriangleMesh` objects that are
             part of the collision geometry of the specified links to the
             4x4 homogenous transform matrices that position them relative
             to the base link's frame.
@@ -1471,8 +571,8 @@ class URDF(URDFType):
                 fk[cm] = pose
         return fk
 
-    def collision_trimesh_fk_batch(self, cfgs=None, links=None):
-        """Computes the poses of the URDF's collision trimeshes using fk.
+    def collision_mesh_fk_batch(self, cfgs=None, links=None):
+        """Computes the poses of the URDF's collision mesh using fk.
 
         Parameters
         ----------
@@ -1483,13 +583,13 @@ class URDF(URDFType):
             each of which has a vector with an entry for each actuated joint.
         links : list of str or list of :class:`.Link`
             The links or names of links to perform forward kinematics on.
-            Only trimeshes from these links will be in the returned map.
+            Only triangle meshes from these links will be in the returned map.
             If not specified, all links are returned.
 
         Returns
         -------
         fk : dict
-            A map from :class:`~trimesh.base.Trimesh` objects that are
+            A map from :class:`open3d.geometry.TriangleMesh` objects that are
             part of the collision geometry of the specified links to the
             4x4 homogenous transform matrices that position them relative
             to the base link's frame.
@@ -1504,201 +604,6 @@ class URDF(URDFType):
                 fk[cm] = poses
         return fk
 
-    def animate(self, cfg_trajectory=None, loop_time=3.0, use_collision=False):
-        """Animate the URDF through a configuration trajectory.
-
-        Parameters
-        ----------
-        cfg_trajectory : dict or (m,n) float
-            A map from joints or joint names to lists of configuration values
-            for each joint along the trajectory, or a vector of
-            vectors where the second dimension contains a value for each joint.
-            If not specified, all joints will articulate from limit to limit.
-            The trajectory steps are assumed to be equally spaced out in time.
-        loop_time : float
-            The time to loop the animation for, in seconds. The trajectory
-            will play fowards and backwards during this time, ending
-            at the inital configuration.
-        use_collision : bool
-            If True, the collision geometry is visualized instead of
-            the visual geometry.
-
-        Examples
-        --------
-
-        You can run this without specifying a ``cfg_trajectory`` to view
-        the full articulation of the URDF
-
-        >>> robot = URDF.load('ur5.urdf')
-        >>> robot.animate()
-
-        .. image:: /_static/ur5.gif
-
-        >>> ct = {'shoulder_pan_joint': [0.0, 2 * np.pi]}
-        >>> robot.animate(cfg_trajectory=ct)
-
-        .. image:: /_static/ur5_shoulder.gif
-
-        >>> ct = {
-        ...    'shoulder_pan_joint' : [-np.pi / 4, np.pi / 4],
-        ...    'shoulder_lift_joint' : [0.0, -np.pi / 2.0],
-        ...    'elbow_joint' : [0.0, np.pi / 2.0]
-        ... }
-        >>> robot.animate(cfg_trajectory=ct)
-
-        .. image:: /_static/ur5_three_joints.gif
-
-        """
-        import pyrender  # Save pyrender import for here for CI
-
-        ct = cfg_trajectory
-
-        traj_len = None  # Length of the trajectory in steps
-        ct_np = {}       # Numpyified trajectory
-
-        # If trajectory not specified, articulate between the limits.
-        if ct is None:
-            lb, ub = self.joint_limit_cfgs
-            if len(lb) > 0:
-                traj_len = 2
-                ct_np = {k: np.array([lb[k], ub[k]]) for k in lb}
-
-        # If it is specified, parse it and extract the trajectory length.
-        elif isinstance(ct, dict):
-            if len(ct) > 0:
-                for k in ct:
-                    val = np.asanyarray(ct[k]).astype(np.float64)
-                    if traj_len is None:
-                        traj_len = len(val)
-                    elif traj_len != len(val):
-                        raise ValueError('Trajectories must be same length')
-                    ct_np[k] = val
-        elif isinstance(ct, (list, tuple, np.ndarray)):
-            ct = np.asanyarray(ct).astype(np.float64)
-            if ct.ndim == 1:
-                ct = ct.reshape(-1, 1)
-            if ct.ndim != 2 or ct.shape[1] != len(self.actuated_joints):
-                raise ValueError('Cfg trajectory must have entry for each joint')
-            ct_np = {j: ct[:,i] for i, j in enumerate(self.actuated_joints)}
-        else:
-            raise TypeError('Invalid type for cfg_trajectory: {}'
-                            .format(type(cfg_trajectory)))
-
-        # If there isn't a trajectory to render, just show the model and exit
-        if len(ct_np) == 0 or traj_len < 2:
-            self.show(use_collision=use_collision)
-            return
-
-        # Create an array of times that loops from 0 to 1 and back to 0
-        fps = 30.0
-        n_steps = int(loop_time * fps / 2.0)
-        times = np.linspace(0.0, 1.0, n_steps)
-        times = np.hstack((times, np.flip(times)))
-
-        # Create bin edges in the range [0, 1] for each trajectory step
-        bins = np.arange(traj_len) / (float(traj_len) - 1.0)
-
-        # Compute alphas for each time
-        right_inds = np.digitize(times, bins, right=True)
-        right_inds[right_inds == 0] = 1
-        alphas = ((bins[right_inds] - times) /
-                  (bins[right_inds] - bins[right_inds - 1]))
-
-        # Create the new interpolated trajectory
-        new_ct = {}
-        for k in ct_np:
-            new_ct[k] = (alphas * ct_np[k][right_inds - 1] +
-                         (1.0 - alphas) * ct_np[k][right_inds])
-
-        # Create the scene
-        if use_collision:
-            fk = self.collision_trimesh_fk()
-        else:
-            fk = self.visual_trimesh_fk()
-
-        node_map = {}
-        scene = pyrender.Scene()
-        for tm in fk:
-            pose = fk[tm]
-            mesh = pyrender.Mesh.from_trimesh(tm, smooth=False)
-            node = scene.add(mesh, pose=pose)
-            node_map[tm] = node
-
-        # Get base pose to focus on
-        blp = self.link_fk(links=[self.base_link])[self.base_link]
-
-        # Pop the visualizer asynchronously
-        v = pyrender.Viewer(scene, run_in_thread=True,
-                            use_raymond_lighting=True,
-                            view_center=blp[:3,3])
-
-        # Now, run our loop
-        i = 0
-        while v.is_active:
-            cfg = {k: new_ct[k][i] for k in new_ct}
-            i = (i + 1) % len(times)
-
-            if use_collision:
-                fk = self.collision_trimesh_fk(cfg=cfg)
-            else:
-                fk = self.visual_trimesh_fk(cfg=cfg)
-
-            v.render_lock.acquire()
-            for mesh in fk:
-                pose = fk[mesh]
-                node_map[mesh].matrix = pose
-            v.render_lock.release()
-
-            time.sleep(1.0 / fps)
-
-    def show(self, cfg=None, use_collision=False):
-        """Visualize the URDF in a given configuration.
-
-        Parameters
-        ----------
-        cfg : dict or (n), float
-            A map from joints or joint names to configuration values for
-            each joint, or a list containing a value for each actuated joint
-            in sorted order from the base link.
-            If not specified, all joints are assumed to be in their default
-            configurations.
-        use_collision : bool
-            If True, the collision geometry is visualized instead of
-            the visual geometry.
-        """
-        import os
-
-        from PIL import Image
-        import pyrender  # Save pyrender import for here for CI
-
-        if 'PYOPENGL_PLATFORM' in os.environ:
-            offscreen = True
-        else:
-            offscreen = False
-
-        if use_collision:
-            fk = self.collision_trimesh_fk(cfg=cfg)
-        else:
-            fk = self.visual_trimesh_fk(cfg=cfg)
-
-        scene = pyrender.Scene()
-        for tm in fk:
-            _pose = fk[tm]
-            mesh = pyrender.Mesh.from_trimesh(tm, smooth=False)
-            scene.add(mesh, pose=_pose)
-        if offscreen:
-            # create a camera
-            _camera = pyrender.OrthographicCamera(xmag=1.0, ymag=1.0)
-            _cameraNode = pyrender.Node(camera = _camera)
-            scene.add_node(_cameraNode)
-            # create the renderer
-            offscreenRenderer = pyrender.OffscreenRenderer(viewport_width=640, viewport_height=480, point_size=1.0)
-            
-            colors, depth = offscreenRenderer.render(scene)
-            print(f"DEBUG: offscreenRenderer.render(scene) => {colors.shape} {depth.shape}")
-            Image.fromarray(colors.astype('uint8'), mode='RGB').save(f"{self.name}.jpg")
-        else:
-            pyrender.Viewer(scene, use_raymond_lighting=True)
 
     def copy(self, name=None, prefix='', scale=None, collision_only=False):
         """Make a deep copy of the URDF.
@@ -1719,7 +624,7 @@ class URDF(URDFType):
         copy : :class:`.URDF`
             The copied URDF.
         """
-        return URDF(
+        return Robot(
             name = (name if name else self.name),
             links=[v.copy(prefix, scale, collision_only) for v in self.links],
             joints=[v.copy(prefix, scale) for v in self.joints],
@@ -1808,7 +713,7 @@ class URDF(URDFType):
             origin=origin
         ))
 
-        return URDF(name=name, links=links, joints=joints, transmissions=transmissions,
+        return Robot(name=name, links=links, joints=joints, transmissions=transmissions,
                     materials=materials)
 
     def _merge_materials(self):
@@ -1855,7 +760,7 @@ class URDF(URDFType):
             path, _ = os.path.split(file_obj.name)
 
         node = tree.getroot()
-        return URDF._from_xml(node, path)
+        return Robot._from_xml(node, path)
 
     def _validate_joints(self):
         """Raise an exception of any joints are invalidly specified.
@@ -2061,7 +966,7 @@ class URDF(URDFType):
 
         data = ET.tostring(extra_xml_node)
         kwargs['other_xml'] = data
-        return URDF(**kwargs)
+        return Robot(**kwargs)
 
     def _to_xml(self, parent, path):
         node = self._unparse(path)

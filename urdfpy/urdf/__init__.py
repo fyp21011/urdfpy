@@ -1,30 +1,31 @@
 from .base import URDFType
-from .link import (
-    Box,
-    Cylinder,
-    Sphere,
+from .geometry import (
+    Box, 
+    Cylinder, 
+    Sphere, 
     Mesh,
-    Geometry,
+    Geometry, 
+    Collision
+)
+from .link import (
     Texture,
     Material,
-    Collision,
-    Visual,
-    Inertial
+    Visual, 
+    Link
 )
 from .joint import (
     JointCalibration,
     JointDynamics,
     JointLimit,
     JointMimic,
-    SafetyController
+    SafetyController, 
+    Joint
 )
 from .manipulation import (
-    Transmission,
-    Joint,
-    Link,
-    URDF
+    Robot
 )
 from .transmission import (
     TransmissionJoint,
-    Actuator
+    Actuator, 
+    Transmission
 )
