@@ -1,5 +1,6 @@
 import argparse
 import copy
+import random
 
 import open3d as o3d
 from urdfpy import Robot
@@ -10,13 +11,16 @@ def main(path:str, animate:bool=True, nogui:bool=False):
         if animate:
             raise NotImplementedError()
         else:
-            robotFk = robot.visual_mesh_fk()
+            robotFk = robot.visual_mesh_fk({
+                joint.name: random.uniform(0.0, 3.1415926)
+                for joint in robot.joints
+            })
             meshes = []
             for eachMesh in robotFk:
                 visualMesh = copy.deepcopy(eachMesh)
                 # We cannot modify the mesh in the robotFk dict
                 # they are the reference to the origin ones
-                visualMesh.tranform(robotFk[eachMesh])
+                visualMesh.transform(robotFk[eachMesh])
                 visualMesh.compute_vertex_normals()
                 meshes.append(visualMesh)
             o3d.visualization.draw_geometries(meshes)
